@@ -1,0 +1,254 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-platform-backend
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: backend
+    version: v1.0.0
+    security: enabled
+    devsecops: enabled
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: secure-platform
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: secure-platform
+        component: backend
+        version: v1.0.0
+      annotations:
+        # Security annotations for DevSecOps
+        sidecar.istio.io/inject: "false"  # Disable Istio if not using service mesh
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      # 🔒 Security Context - Pod Level
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Service Account for RBAC
+      serviceAccountName: secure-platform-backend-sa
+      
+      # 🛡️ Security Pod Disruption Budget
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - secure-platform
+                - key: component
+                  operator: In
+                  values:
+                  - backend
+              topologyKey: kubernetes.io/hostname
+      
+      # 🔍 Container Security
+      containers:
+      - name: backend
+        image: ghcr.io/secure-fullstack-devsecops-platform/backend:latest
+        imagePullPolicy: Always
+        
+        # 🔒 Container Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+            add: []
+        
+        # 🔍 Health Checks
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 10
+        
+        # 📊 Monitoring
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: management
+          containerPort: 8081
+          protocol: TCP
+        
+        # 🏷️ Resource Management
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        # 🔐 Environment Variables
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "k8s"
+        - name: JAVA_OPTS
+          value: "-Xmx256m -Xms128m -Djava.security.egd=file:/dev/./urandom"
+        - name: LOGGING_LEVEL_COM_SECUREPLATFORM
+          value: "INFO"
+        
+        # 🔄 Volume Mounts (Read-only root filesystem)
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+          subPath: logs
+        - name: application-config
+          mountPath: /app/config
+          readOnly: true
+        
+        # 🛡️ Security Features
+        # - Drop all capabilities
+        # - Read-only root filesystem
+        # - Non-root user
+        # - No privilege escalation
+        # - Seccomp profile
+        # - Resource limits
+        # - Health checks
+        # - Monitoring annotations
+        
+      # 📁 Volumes
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        persistentVolumeClaim:
+          claimName: secure-platform-logs-pvc
+      - name: application-config
+        configMap:
+          name: secure-platform-config
+          defaultMode: 0444
+      
+      # 🗑️ Termination Grace Period
+      terminationGracePeriodSeconds: 30
+      
+      # 🚫 Tolerations and Node Selectors
+      tolerations:
+      - key: "secure-platform.tier"
+        operator: "Equal"
+        value: "backend"
+        effect: "NoSchedule"
+      
+      nodeSelector:
+        kubernetes.io/arch: "amd64"
+        node.kubernetes.io/instance-type: "m5.large"
+
+---
+# 🔐 Service Account for Backend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secure-platform-backend-sa
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: backend
+  # Automount Service Account Token
+  automountServiceAccountToken: true
+
+---
+# 🌐 Service for Backend
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-platform-backend-service
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: backend
+  annotations:
+    # Security annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: management
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  selector:
+    app: secure-platform
+    component: backend
+
+---
+# 🔍 ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: secure-platform-backend-monitor
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: backend
+spec:
+  selector:
+    matchLabels:
+      app: secure-platform
+      component: backend
+  endpoints:
+  - port: http
+    path: /actuator/prometheus
+    interval: 30s
+    scrapeTimeout: 10s
+  - port: management
+    path: /actuator/prometheus
+    interval: 30s
+    scrapeTimeout: 10s
+    # Secure scraping with TLS
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: false

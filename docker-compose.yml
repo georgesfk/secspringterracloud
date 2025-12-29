@@ -1,0 +1,219 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: secure-platform-db
+    environment:
+      POSTGRES_DB: secure_platform
+      POSTGRES_USER: secure_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_pass_123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./security-configs/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - secure-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U secure_user -d secure_platform"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for Session Management
+  redis:
+    image: redis:7-alpine
+    container_name: secure-platform-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_pass_123}
+    ports:
+      - "6379:6379"
+    networks:
+      - secure-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Spring Boot Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: secure-platform-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DATABASE_URL: jdbc:postgresql://postgres:5432/secure_platform
+      DATABASE_USERNAME: secure_user
+      DATABASE_PASSWORD: ${DB_PASSWORD:-secure_pass_123}
+      REDIS_URL: redis://:redis_pass_123@redis:6379
+      JWT_SECRET: ${JWT_SECRET:-mySecretKey123456789012345678901234567890}
+      JWT_EXPIRATION: 86400
+    ports:
+      - "8080:8080"
+    networks:
+      - secure-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./logs:/app/logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Angular Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: secure-platform-frontend
+    environment:
+      NODE_ENV: production
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - secure-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./logs:/var/log/nginx
+
+  # OWASP ZAP for Security Testing
+  owasp-zap:
+    image: owasp/zap2docker-stable
+    container_name: secure-platform-owasp-zap
+    command: zap.sh -daemon -host 0.0.0.0 -port 8090 -config api.key=${OWASP_ZAP_API_KEY:-secure-api-key}
+    ports:
+      - "8090:8090"
+      - "8081:8081"  # ZAP proxy port
+    networks:
+      - secure-network
+    environment:
+      TZ: UTC
+    volumes:
+      - ./security-configs/owasp-zap:/zap/wrk/:rw
+    restart: unless-stopped
+
+  # Trivy for Vulnerability Scanning
+  trivy:
+    image: aquasec/trivy:latest
+    container_name: secure-platform-trivy
+    command: server --listen 0.0.0.0:4954
+    ports:
+      - "4954:4954"
+    networks:
+      - secure-network
+    volumes:
+      - ./security-configs/trivy-cache:/root/.cache/trivy
+    restart: unless-stopped
+    environment:
+      TRIVY_SKIP_UPDATE: "false"
+
+  # Prometheus for Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: secure-platform-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    networks:
+      - secure-network
+    volumes:
+      - ./security-configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+
+  # Grafana for Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: secure-platform-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-secure_grafana_123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    networks:
+      - secure-network
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./security-configs/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    restart: unless-stopped
+
+networks:
+  secure-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# Development override
+# Use: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+---
+version: '3.8'
+
+# Development override configuration
+# Uncomment and modify for local development
+
+services:
+  backend:
+    build:
+      target: builder  # Use builder stage for development
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      LOGGING_LEVEL_COM_SECUREPLATFORM: DEBUG
+    volumes:
+      - ./backend-springboot:/app/src:ro
+      - ./logs:/app/logs
+    command: mvn spring-boot:run
+
+  frontend:
+    build:
+      target: builder  # Use builder stage for development
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./frontend-angular:/app:ro
+      - /app/node_modules
+    command: npm run start -- --host 0.0.0.0 --port 4200
+    ports:
+      - "4200:4200"

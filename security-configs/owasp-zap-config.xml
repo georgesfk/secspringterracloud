@@ -1,0 +1,292 @@
+# OWASP ZAP Configuration for Secure Platform DevSecOps
+# This configuration is used for automated security testing
+
+# Basic Configuration
+<configuration>
+    <global>
+        <!-- ZAP API Configuration -->
+        <api>
+            <key>secure-api-key</key>
+            <enabled>true</enabled>
+        </api>
+        
+        <!-- Alert Thresholds -->
+        <alert>
+            <threshold>MEDIUM</threshold>
+            <confidence>MEDIUM</confidence>
+        </alert>
+        
+        <!-- Connection Timeouts -->
+        <connection>
+            <timeout>30</timeout>
+            <readTimeout>60</timeout>
+        </connection>
+        
+        <!-- Proxy Configuration -->
+        <proxy>
+            <host>0.0.0.0</host>
+            <port>8081</port>
+            <apiPort>8090</apiPort>
+        </proxy>
+    </global>
+</configuration>
+
+# Authentication Configuration
+<authentication>
+    <!-- JWT Token Configuration -->
+    <jwt>
+        <headerName>Authorization</headerName>
+        <tokenPrefix>Bearer </tokenPrefix>
+        <extractionMethod>HEADER</extractionMethod>
+    </jwt>
+    
+    <!-- Session Management -->
+    <session>
+        <method>COOKIE</method>
+        <cookieName>JSESSIONID</cookieName>
+        <timeout>3600</timeout>
+    </session>
+</authentication>
+
+# Scan Configuration
+<scans>
+    <!-- Active Scan Policies -->
+    <activeScan>
+        <policy>DevSecOps-Policy</policy>
+        <strength>MEDIUM</strength>
+        <threshold>MEDIUM</threshold>
+    </activeScan>
+    
+    <!-- Spider Scan Configuration -->
+    <spider>
+        <maxDepth>5</maxDepth>
+        <maxNodes>1000</maxNodes>
+        <maxDuration>300</maxDuration>
+    </spider>
+    
+    <!-- AJAX Spider Configuration -->
+    <ajaxSpider>
+        <maxDepth>3</maxDepth>
+        <maxNodes>500</maxNodes>
+        <maxDuration>180</maxDuration>
+    </ajaxSpider>
+</scans>
+
+# Security Test Configuration
+<securityTests>
+    <!-- XSS Tests -->
+    <xss>
+        <enabled>true</enabled>
+        <reflected>true</reflected>
+        <stored>true</stored>
+        <dom>true</dom>
+    </xss>
+    
+    <!-- SQL Injection Tests -->
+    <sqlInjection>
+        <enabled>true</enabled>
+        <errorBased>true</errorBased>
+        <booleanBased>true</booleanBased>
+        <timeBased>true</timeBased>
+        <unionBased>true</unionBased>
+    </sqlInjection>
+    
+    <!-- CSRF Tests -->
+    <csrf>
+        <enabled>true</enabled>
+        <checkTokens>true</checkTokens>
+    </csrf>
+    
+    <!-- Authentication Tests -->
+    <authentication>
+        <enabled>true</enabled>
+        <bruteForce>true</bruteForce>
+        <sessionFixation>true</sessionFixation>
+    </authentication>
+    
+    <!-- Authorization Tests -->
+    <authorization>
+        <enabled>true</enabled>
+        <idor>true</idor>
+        <pathTraversal>true</pathTraversal>
+        <missingFunctionLevelAuth>true</missingFunctionLevelAuth>
+    </authorization>
+    
+    <!-- Input Validation Tests -->
+    <inputValidation>
+        <enabled>true</enabled>
+        <commandInjection>true</commandInjection>
+        <ldapInjection>true</ldapInjection>
+        <nosqlInjection>true</nosqlInjection>
+        <pathTraversal>true</pathTraversal>
+        <serverSideRequestForgery>true</serverSideRequestForgery>
+    </inputValidation>
+    
+    <!-- Cryptographic Tests -->
+    <cryptographic>
+        <enabled>true</enabled>
+        <weakCrypto>true</weakCrypto>
+        <insecureTransport>true</insecureTransport>
+        <certificateValidation>true</certificateValidation>
+    </cryptographic>
+</securityTests>
+
+# Reporting Configuration
+<reporting>
+    <!-- Generate Reports -->
+    <formats>
+        <!-- HTML Report -->
+        <html>
+            <enabled>true</enabled>
+            <outputFile>security-reports/owasp-zap-report.html</outputFile>
+            <includePassive>true</includePassive>
+            <includeActive>true</includeActive>
+            <includeTechnical>true</includeTechnical>
+        </html>
+        
+        <!-- JSON Report -->
+        <json>
+            <enabled>true</enabled>
+            <outputFile>security-reports/owasp-zap-report.json</outputFile>
+            <includePassive>true</includePassive>
+            <includeActive>true</includeActive>
+        </json>
+        
+        <!-- XML Report -->
+        <xml>
+            <enabled>true</enabled>
+            <outputFile>security-reports/owasp-zap-report.xml</outputFile>
+            <includePassive>true</includePassive>
+            <includeActive>true</includeActive>
+        </xml>
+        
+        <!-- Markdown Report -->
+        <markdown>
+            <enabled>true</enabled>
+            <outputFile>security-reports/owasp-zap-report.md</outputFile>
+            <includePassive>true</includePassive>
+            <includeActive>true</includeActive>
+        </markdown>
+    </formats>
+    
+    <!-- Alert Configuration -->
+    <alerts>
+        <high>fail</high>
+        <medium>warn</medium>
+        <low>info</low>
+        <informational>info</informational>
+    </alerts>
+</reporting>
+
+# API Configuration
+<api>
+    <!-- Authentication -->
+    <authentication>
+        <type>API_KEY</type>
+        <key>secure-api-key</key>
+    </authentication>
+    
+    <!-- CORS Configuration -->
+    <cors>
+        <enabled>true</enabled>
+        <allowOrigins>*</allowOrigins>
+        <allowMethods>GET,POST,PUT,DELETE,OPTIONS</allowMethods>
+        <allowHeaders>*,Authorization,Content-Type</allowHeaders>
+    </cors>
+    
+    <!-- Rate Limiting -->
+    <rateLimit>
+        <requests>100</requests>
+        <period>60</period>
+    </rateLimit>
+</api>
+
+# Environment-Specific Configurations
+<environments>
+    <!-- Development -->
+    <development>
+        <alertThreshold>LOW</alertThreshold>
+        <scanStrength>LOW</scanStrength>
+        <detailedOutput>true</detailedOutput>
+    </development>
+    
+    <!-- Staging -->
+    <staging>
+        <alertThreshold>MEDIUM</alertThreshold>
+        <scanStrength>MEDIUM</scanStrength>
+        <detailedOutput>true</detailedOutput>
+    </staging>
+    
+    <!-- Production -->
+    <production>
+        <alertThreshold>HIGH</alertThreshold>
+        <scanStrength>HIGH</scanStrength>
+        <detailedOutput>false</detailedOutput>
+        <rateLimited>true</rateLimited>
+    </production>
+</environments>
+
+# Custom Rules and Extensions
+<custom>
+    <!-- JWT Security Rules -->
+    <jwt>
+        <checkAlgorithm>true</checkAlgorithm>
+        <checkExpiration>true</checkExpiration>
+        <checkIssuer>true</checkIssuer>
+        <checkAudience>true</checkAudience>
+        <checkSignature>true</checkSignature>
+    </jwt>
+    
+    <!-- OWASP Top 10 2021 -->
+    <owasp2021>
+        <A01-BrokenAccessControl>
+            <enabled>true</enabled>
+            <strict>true</strict>
+        </A01-BrokenAccessControl>
+        
+        <A02-CryptographicFailures>
+            <enabled>true</enabled>
+            <checkWeakCrypto>true</checkWeakCrypto>
+        </A02-CryptographicFailures>
+        
+        <A03-Injection>
+            <enabled>true</enabled>
+            <checkAll>true</checkAll>
+        </A03-Injection>
+        
+        <A04-InsecureDesign>
+            <enabled>true</enabled>
+            <checkDesign>true</checkDesign>
+        </A04-InsecureDesign>
+        
+        <A05-SecurityMisconfiguration>
+            <enabled>true</enabled>
+            <checkHeaders>true</checkHeaders>
+        </A05-SecurityMisconfiguration>
+        
+        <A06-VulnerableComponents>
+            <enabled>true</enabled>
+            <checkVersions>true</checkVersions>
+        </A06-VulnerableComponents>
+        
+        <A07-IdentificationFailures>
+            <enabled>true</enabled>
+            <checkAuth>true</checkAuth>
+        </A07-IdentificationFailures>
+        
+        <A08-SoftwareIntegrityFailures>
+            <enabled>true</enabled>
+            <checkIntegrity>true</checkIntegrity>
+        </A08-SoftwareIntegrityFailures>
+        
+        <A09-LoggingFailures>
+            <enabled>true</enabled>
+            <checkLogs>true</checkLogs>
+        </A09-LoggingFailures>
+        
+        <A10-ServerSideRequestForgery>
+            <enabled>true</enabled>
+            <checkSSRF>true</checkSSRF>
+        </A10-ServerSideRequestForgery>
+    </owasp2021>
+</custom>

@@ -1,0 +1,55 @@
+# Multi-stage build for Spring Boot Backend
+# Stage 1: Build the application
+FROM openjdk:17-jdk-alpine AS builder
+
+WORKDIR /app
+
+# Install Maven
+RUN apk add --no-cache maven
+
+# Copy pom.xml and download dependencies
+COPY backend-springboot/pom.xml .
+COPY backend-springboot/src ./src
+
+# Build the application
+RUN mvn clean package -DskipTests
+
+# Stage 2: Create runtime image
+FROM openjdk:17-jre-alpine
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+
+WORKDIR /app
+
+# Copy JAR from builder stage
+COPY --from=builder /app/target/backend-springboot-*.jar app.jar
+
+# Change ownership to non-root user
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Health check for container orchestration
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/actuator/health || exit 1
+
+# Expose port
+EXPOSE 8080
+
+# Run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
+# Security configurations
+ENV JAVA_OPTS="-Xmx512m -Xms256m -Djava.security.egd=file:/dev/./urandom"
+ENV SPRING_PROFILES_ACTIVE=prod
+
+# Labels for security and compliance
+LABEL maintainer="Secure Platform Team" \
+      version="1.0.0" \
+      description="Secure Spring Boot Backend with DevSecOps" \
+      security.scan="enabled" \
+      compliance="owasp" \
+      runtime="jre17"

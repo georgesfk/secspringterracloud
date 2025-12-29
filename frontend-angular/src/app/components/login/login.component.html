@@ -1,0 +1,120 @@
+<div class="login-container">
+  <div class="login-card">
+    <div class="login-header">
+      <h2><i class="fas fa-shield-alt"></i> Secure Platform Login</h2>
+      <p class="text-muted">DevSecOps Protected Authentication</p>
+    </div>
+
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+      <!-- Error Alert -->
+      <div class="alert alert-danger" *ngIf="error">
+        <i class="fas fa-exclamation-triangle"></i> {{ error }}
+      </div>
+
+      <!-- Username/Email Field -->
+      <div class="form-group">
+        <label for="usernameOrEmail">
+          <i class="fas fa-user"></i> Username or Email
+        </label>
+        <input
+          type="text"
+          id="usernameOrEmail"
+          class="form-control"
+          formControlName="usernameOrEmail"
+          [class.is-invalid]="submitted && f.usernameOrEmail.errors"
+          placeholder="Enter your username or email"
+        >
+        <div class="invalid-feedback" *ngIf="submitted && f.usernameOrEmail.errors">
+          <div *ngIf="f.usernameOrEmail.errors.required">Username or email is required</div>
+        </div>
+      </div>
+
+      <!-- Password Field -->
+      <div class="form-group">
+        <label for="password">
+          <i class="fas fa-lock"></i> Password
+        </label>
+        <input
+          type="password"
+          id="password"
+          class="form-control"
+          formControlName="password"
+          [class.is-invalid]="submitted && f.password.errors"
+          placeholder="Enter your password"
+        >
+        <div class="invalid-feedback" *ngIf="submitted && f.password.errors">
+          <div *ngIf="f.password.errors.required">Password is required</div>
+        </div>
+      </div>
+
+      <!-- Security Features Info -->
+      <div class="security-features">
+        <div class="feature-item">
+          <i class="fas fa-key text-success"></i>
+          <span>JWT Authentication</span>
+        </div>
+        <div class="feature-item">
+          <i class="fas fa-shield-alt text-success"></i>
+          <span>Spring Security</span>
+        </div>
+        <div class="feature-item">
+          <i class="fas fa-lock text-success"></i>
+          <span>Encrypted Sessions</span>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <button
+        type="submit"
+        class="btn btn-primary btn-block"
+        [disabled]="loading"
+      >
+        <span *ngIf="loading" class="spinner-border spinner-border-sm mr-1"></span>
+        <i class="fas fa-sign-in-alt"></i> Login
+      </button>
+
+      <!-- Additional Actions -->
+      <div class="login-actions">
+        <button
+          type="button"
+          class="btn btn-outline-info btn-sm"
+          (click)="checkSecurityStatus()"
+        >
+          <i class="fas fa-check-circle"></i> Security Check
+        </button>
+        <button
+          type="button"
+          class="btn btn-outline-secondary btn-sm"
+          (click)="navigateToRegister()"
+        >
+          <i class="fas fa-user-plus"></i> Register
+        </button>
+      </div>
+    </form>
+
+    <!-- Security Notice -->
+    <div class="security-notice">
+      <div class="alert alert-info">
+        <small>
+          <i class="fas fa-info-circle"></i>
+          <strong>DevSecOps Platform:</strong> This application includes OWASP ZAP integration, 
+          JWT authentication, and comprehensive security monitoring.
+        </small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Demo Credentials -->
+<div class="demo-credentials">
+  <div class="card">
+    <div class="card-header">
+      <h6><i class="fas fa-flask"></i> Demo Credentials</h6>
+    </div>
+    <div class="card-body">
+      <p><strong>Admin:</strong> admin@secure.com / admin123</p>
+      <p><strong>User:</strong> user@secure.com / user123</p>
+      <p><small class="text-muted">These are default credentials for testing purposes</small></p>
+    </div>
+  </div>
+</div>

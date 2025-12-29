@@ -1,0 +1,165 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: secure-devsecops-cloud
+  
+  # Security Configuration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:https://secure-devsecops-cloud.com}
+          jwk-set-uri: ${JWT_JWK_SET_URI:https://secure-devsecops-cloud.com/.well-known/jwks.json}
+  
+  # Actuator for monitoring
+  management:
+    endpoints:
+      web:
+        exposure:
+          include: health,info,metrics,prometheus,readiness,liveness
+    endpoint:
+      health:
+        show-details: when-authorized
+        probes:
+          enabled: true
+      readiness:
+        enabled: true
+      liveness:
+        enabled: true
+    
+    metrics:
+      export:
+        prometheus:
+          enabled: true
+    
+    info:
+      env:
+        enabled: true
+  
+  # Logging Configuration
+  logging:
+    level:
+      com.example: INFO
+      org.springframework.security: INFO
+    pattern:
+      console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+      file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file:
+      name: /app/logs/application.log
+
+# Custom Application Configuration
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:mySecretKey123456789012345678901234567890}
+      expiration: 86400000 # 24 hours
+  
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:4200,https://secure-devsecops-cloud.com}
+    allowed-methods: ${CORS_METHODS:GET,POST,PUT,DELETE,OPTIONS}
+    allowed-headers: ${CORS_HEADERS:*,Authorization,Content-Type}
+    allow-credentials: true
+    max-age: 3600
+
+# DevSecOps Specific Configuration
+devsecops:
+  security:
+    headers:
+      x-frame-options: DENY
+      x-content-type-options: nosniff
+      x-xss-protection: "1; mode=block"
+      strict-transport-security: "max-age=31536000; includeSubDomains"
+      content-security-policy: "default-src 'self'"
+    
+  monitoring:
+    enabled: true
+    prometheus:
+      enabled: true
+    
+  audit:
+    enabled: true
+    log-security-events: true
+
+---
+# Development Profile
+spring:
+  config:
+    activate:
+      on-profile: dev
+  
+  # Development specific configurations
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # Development logging
+  logging:
+    level:
+      com.example: DEBUG
+      org.springframework.security: DEBUG
+      org.springframework.web: DEBUG
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+  
+  # Production security
+  security:
+    require-ssl: true
+  
+  # Production logging
+  logging:
+    level:
+      com.example: INFO
+      org.springframework.security: WARN
+      org.springframework.web: WARN
+      root: WARN
+    file:
+      name: /app/logs/application.log
+    logback:
+      rollingpolicy:
+        max-file-size: 100MB
+        max-history: 30
+        total-size-cap: 3GB
+
+# Production specific configurations
+server:
+  ssl:
+    enabled: true
+    key-store: ${SSL_KEYSTORE_PATH:/etc/ssl/certs/keystore.p12}
+    key-store-password: ${SSL_KEYSTORE_PASSWORD}
+    key-store-type: PKCS12
+    key-alias: ${SSL_KEY_ALIAS:secure-devsecops}
+  
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-exception: false
+
+# Production DevSecOps Configuration
+devsecops:
+  security:
+    headers:
+      strict-transport-security: "max-age=31536000; includeSubDomains; preload"
+    
+  monitoring:
+    detailed-health-checks: false
+    
+  audit:
+    log-security-events: true
+    log-audit-trail: true
+

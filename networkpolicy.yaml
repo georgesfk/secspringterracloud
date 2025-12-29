@@ -1,0 +1,474 @@
+# 🌐 Network Policies for Secure Platform
+# Network segmentation and security controls
+
+---
+# 🔒 Default Deny All Ingress and Egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: network-security
+    policy: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# 🌐 Allow DNS Resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: network-security
+    policy: allow-dns
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# 🔒 Backend Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: secure-platform-backend-policy
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: backend
+    policy: restricted
+spec:
+  podSelector:
+    matchLabels:
+      app: secure-platform
+      component: backend
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # 📥 Ingress Rules (who can talk to backend)
+  ingress:
+  # Allow frontend to talk to backend
+  - from:
+    - podSelector:
+        matchLabels:
+          app: secure-platform
+          component: frontend
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # Allow health checks from service mesh/proxy
+  - from:
+    - podSelector:
+        matchLabels:
+          app: kube-proxy
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # Allow monitoring to scrape metrics
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 8081
+  
+  # Allow ingress controller (for health checks)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: nginx-ingress
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # 🚫 Deny all other ingress traffic
+  
+  # 📤 Egress Rules (where backend can talk)
+  egress:
+  # Allow database connection
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgresql
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow Redis connection
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow HTTPS to external APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow HTTP for health checks (limited)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  # 🚫 Deny all other egress traffic
+
+---
+# 🔒 Frontend Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: secure-platform-frontend-policy
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: frontend
+    policy: restricted
+spec:
+  podSelector:
+    matchLabels:
+      app: secure-platform
+      component: frontend
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # 📥 Ingress Rules (who can talk to frontend)
+  ingress:
+  # Allow HTTP/HTTPS from internet (via load balancer)
+  - from:
+    - namespaceSelector: {}
+    - podSelector:
+        matchLabels:
+          app: aws-load-balancer
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 443
+  
+  # Allow health checks from service mesh/proxy
+  - from:
+    - podSelector:
+        matchLabels:
+          app: kube-proxy
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  # Allow monitoring to scrape metrics
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  # 🚫 Deny all other ingress traffic
+  
+  # 📤 Egress Rules (where frontend can talk)
+  egress:
+  # Allow backend communication
+  - to:
+    - podSelector:
+        matchLabels:
+          app: secure-platform
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # Allow HTTPS to external APIs (if needed)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # 🚫 Deny all other egress traffic
+
+---
+# 📊 Monitoring Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: secure-platform-monitoring-policy
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: monitoring
+    policy: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # 📥 Ingress Rules (who can talk to monitoring)
+  ingress:
+  # Allow scraping from authorized services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: secure-platform
+    ports:
+    - protocol: TCP
+      port: 9090
+  
+  # Allow Grafana to query Prometheus
+  - from:
+    - podSelector:
+        matchLabels:
+          app: grafana
+    ports:
+    - protocol: TCP
+      port: 9090
+  
+  # 🚫 Deny all other ingress traffic
+  
+  # 📤 Egress Rules (where monitoring can talk)
+  egress:
+  # Allow scraping metrics from all pods in namespace
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: secure-platform
+    ports:
+    - protocol: TCP
+      port: 8080  # Backend metrics
+    - protocol: TCP
+      port: 80    # Frontend metrics
+    - protocol: TCP
+      port: 9090  # Prometheus metrics
+    - protocol: TCP
+      port: 3000  # Grafana metrics
+  
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # 🚫 Deny all other egress traffic
+
+---
+# 🗄️ Database Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: secure-platform-database-policy
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: database
+    policy: database-restricted
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # 📥 Ingress Rules (who can talk to database)
+  ingress:
+  # Only allow backend to access database
+  - from:
+    - podSelector:
+        matchLabels:
+          app: secure-platform
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow monitoring (if needed)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # 🚫 Deny all other ingress traffic
+  
+  # 📤 Egress Rules (database specific)
+  egress:
+  # DNS resolution only
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # 🚫 Deny all other egress traffic
+
+---
+# 🔐 Admin Network Policy (for admin tools)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: secure-platform-admin-policy
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: admin
+    policy: admin-restricted
+spec:
+  podSelector:
+    matchLabels:
+      component: admin
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # 📥 Ingress Rules (admin access)
+  ingress:
+  # Allow admin users only
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: admin
+    - podSelector:
+        matchLabels:
+          app: secure-platform
+          role: admin
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # 🚫 Deny all other ingress traffic
+  
+  # 📤 Egress Rules (admin can access everything needed)
+  egress:
+  # Full access to application services
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: secure-platform
+    ports:
+    - protocol: TCP
+      port: 8080  # Backend
+    - protocol: TCP
+      port: 80    # Frontend
+    - protocol: TCP
+      port: 5432  # Database
+    - protocol: TCP
+      port: 6379  # Redis
+  
+  # DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # External HTTPS for admin operations
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# 🚨 Alert Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: secure-platform-alert-policy
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: alerting
+    policy: alert-restricted
+spec:
+  podSelector:
+    matchLabels:
+      component: alertmanager
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # 📥 Ingress Rules (alerting)
+  ingress:
+  # Allow Prometheus to send alerts
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9093
+  
+  # 🚫 Deny all other ingress traffic
+  
+  # 📤 Egress Rules (where alerts can be sent)
+  egress:
+  # DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # External notification services (Slack, email, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS for webhooks
+  
+  # Email (if using SMTP)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 587  # SMTP TLS
+  
+  # 🚫 Deny all other egress traffic

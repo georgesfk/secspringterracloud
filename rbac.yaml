@@ -1,0 +1,339 @@
+# 🔐 RBAC Configuration for Secure Platform
+# Role-Based Access Control for DevSecOps
+
+---
+# 🏢 Namespace Definition
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: secure-platform
+  labels:
+    name: secure-platform
+    security: enabled
+    compliance: owasp
+    devsecops: enabled
+  annotations:
+    description: "Secure Platform Namespace with DevSecOps practices"
+    owasp-compliance: "A01,A02,A03,A05,A06,A07,A08,A09,A10"
+
+---
+# 🔑 Service Account for Backend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secure-platform-backend-sa
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: backend
+    tier: backend
+  # Automount Service Account Token
+  automountServiceAccountToken: true
+  # Image pull secrets for private registry
+  imagePullSecrets:
+  - name: secure-platform-registry-secret
+
+---
+# 🔑 Service Account for Frontend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secure-platform-frontend-sa
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: frontend
+    tier: frontend
+  automountServiceAccountToken: true
+  imagePullSecrets:
+  - name: secure-platform-registry-secret
+
+---
+# 🔑 Service Account for Monitoring
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secure-platform-monitoring-sa
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: monitoring
+  automountServiceAccountToken: true
+
+---
+# 🔑 Service Account for CI/CD
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secure-platform-cicd-sa
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: cicd
+  automountServiceAccountToken: true
+
+---
+# 👥 Role: Backend Application
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secure-platform-backend-role
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: backend
+rules:
+  # 📊 ConfigMaps and Secrets (Read-only)
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  
+  # 📊 Endpoints (Read-only)
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+  
+  # 🔍 Service Discovery
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  
+  # 📊 Pod Metrics (if using metrics-server)
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  
+  # 🚫 Deny write access to sensitive resources
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]  # Only read existing secrets, no create/update/delete
+
+---
+# 👥 Role: Frontend Application
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secure-platform-frontend-role
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: frontend
+rules:
+  # 📊 ConfigMaps (Read-only)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  
+  # 🌐 Services (Read-only)
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  
+  # 🔍 Service Discovery
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+
+---
+# 👥 Role: Monitoring and Observability
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secure-platform-monitoring-role
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: monitoring
+rules:
+  # 📊 All resources (Read-only for monitoring)
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  
+  # 📊 Metrics
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  
+  # 📊 Custom Metrics (if using custom metrics API)
+  - apiGroups: ["custom.metrics.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list"]
+  
+  # 📊 Prometheus Rules
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["servicemonitors", "prometheusrules", "alertmanagers"]
+    verbs: ["get", "list", "watch"]
+
+---
+# 👥 Role: CI/CD Operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secure-platform-cicd-role
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: cicd
+rules:
+  # 🏗️ Deployments
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # 🌐 Services
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # 🔍 ConfigMaps and Secrets
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # 📊 Pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # 🔍 Pod Logs
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  
+  # 🔍 Pod Exec (for debugging)
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  
+  # 📊 Events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+
+---
+# 🔗 RoleBinding: Backend Application
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: secure-platform-backend-binding
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: backend
+subjects:
+- kind: ServiceAccount
+  name: secure-platform-backend-sa
+  namespace: secure-platform
+roleRef:
+  kind: Role
+  name: secure-platform-backend-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# 🔗 RoleBinding: Frontend Application
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: secure-platform-frontend-binding
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: frontend
+subjects:
+- kind: ServiceAccount
+  name: secure-platform-frontend-sa
+  namespace: secure-platform
+roleRef:
+  kind: Role
+  name: secure-platform-frontend-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# 🔗 RoleBinding: Monitoring
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: secure-platform-monitoring-binding
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: monitoring
+subjects:
+- kind: ServiceAccount
+  name: secure-platform-monitoring-sa
+  namespace: secure-platform
+roleRef:
+  kind: Role
+  name: secure-platform-monitoring-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# 🔗 RoleBinding: CI/CD
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: secure-platform-cicd-binding
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: cicd
+subjects:
+- kind: ServiceAccount
+  name: secure-platform-cicd-sa
+  namespace: secure-platform
+roleRef:
+  kind: Role
+  name: secure-platform-cicd-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# 🚫 Pod Security Standards
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pod-security-policy
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: security
+data:
+  # Pod Security Policy Configuration
+  pod-security-policy.yaml: |
+    # Enforce security standards
+    apiVersion: policy/v1beta1
+    kind: PodSecurityPolicy
+    metadata:
+      name: secure-platform-psp
+      annotations:
+        seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'runtime/default'
+        apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+        seccomp.security.alpha.kubernetes.io/defaultProfileName: 'runtime/default'
+        apparmor.security.beta.kubernetes.io/defaultProfileName: 'runtime/default'
+    spec:
+      privileged: false
+      allowPrivilegeEscalation: false
+      requiredDropCapabilities:
+        - ALL
+      volumes:
+        - 'configMap'
+        - 'emptyDir'
+        - 'projected'
+        - 'secret'
+        - 'persistentVolumeClaim'
+      hostNetwork: false
+      hostIPC: false
+      hostPID: false
+      runAsUser:
+        rule: 'MustRunAsNonRoot'
+      supplementalGroups:
+        rule: 'MustRunAs'
+        ranges:
+          - min: 1
+            max: 65535
+      fsGroup:
+        rule: 'MustRunAs'
+        ranges:
+          - min: 1
+            max: 65535
+      readOnlyRootFilesystem: true

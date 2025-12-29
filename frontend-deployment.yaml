@@ -1,0 +1,253 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-platform-frontend
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: frontend
+    version: v1.0.0
+    security: enabled
+    devsecops: enabled
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: secure-platform
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: secure-platform
+        component: frontend
+        version: v1.0.0
+      annotations:
+        # Security annotations for DevSecOps
+        sidecar.istio.io/inject: "false"  # Disable Istio if not using service mesh
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "80"
+        prometheus.io/path: "/metrics"
+    spec:
+      # 🔒 Security Context - Pod Level
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Service Account for RBAC
+      serviceAccountName: secure-platform-frontend-sa
+      
+      # 🛡️ Security Pod Disruption Budget
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - secure-platform
+                - key: component
+                  operator: In
+                  values:
+                  - frontend
+              topologyKey: kubernetes.io/hostname
+      
+      # 🔍 Container Security
+      containers:
+      - name: frontend
+        image: ghcr.io/secure-fullstack-devsecops-platform/frontend:latest
+        imagePullPolicy: Always
+        
+        # 🔒 Container Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+            add: []
+        
+        # 🔍 Health Checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 10
+        
+        # 📊 Monitoring
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        
+        # 🏷️ Resource Management
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        
+        # 🔐 Environment Variables
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: NGINX_HOST
+          value: "0.0.0.0"
+        - name: NGINX_PORT
+          value: "80"
+        
+        # 🔄 Volume Mounts (Read-only root filesystem)
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /var/log/nginx
+          subPath: nginx
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-run
+          mountPath: /var/run
+        - name: frontend-config
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: nginx.conf
+        
+        # 🛡️ Security Features
+        # - Drop all capabilities
+        # - Read-only root filesystem
+        # - Non-root user
+        # - No privilege escalation
+        # - Seccomp profile
+        # - Resource limits
+        # - Health checks
+        # - Monitoring annotations
+        
+      # 📁 Volumes
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        persistentVolumeClaim:
+          claimName: secure-platform-logs-pvc
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-run
+        emptyDir: {}
+      - name: frontend-config
+        configMap:
+          name: secure-platform-frontend-config
+          defaultMode: 0444
+      
+      # 🗑️ Termination Grace Period
+      terminationGracePeriodSeconds: 30
+      
+      # 🚫 Tolerations and Node Selectors
+      tolerations:
+      - key: "secure-platform.tier"
+        operator: "Equal"
+        value: "frontend"
+        effect: "NoSchedule"
+      
+      nodeSelector:
+        kubernetes.io/arch: "amd64"
+        node.kubernetes.io/instance-type: "m5.large"
+
+---
+# 🔐 Service Account for Frontend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secure-platform-frontend-sa
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: frontend
+  # Automount Service Account Token
+  automountServiceAccountToken: true
+
+---
+# 🌐 Service for Frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-platform-frontend-service
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: frontend
+  annotations:
+    # Security annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: secure-platform
+    component: frontend
+
+---
+# 🔍 ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: secure-platform-frontend-monitor
+  namespace: secure-platform
+  labels:
+    app: secure-platform
+    component: frontend
+spec:
+  selector:
+    matchLabels:
+      app: secure-platform
+      component: frontend
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
